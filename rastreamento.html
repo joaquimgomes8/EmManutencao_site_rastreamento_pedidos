@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreamento - Localização do Pedido</title>
+    <script src="database.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: #f0f2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .card { background: white; border-radius: 16px; width: 100%; max-width: 900px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); overflow: hidden; }
+        .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px 30px; color: white; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+        .card-header h1 { font-size: 20px; display: flex; align-items: center; gap: 10px; }
+        .card-header .order-id { background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+        .card-header .header-actions { display: flex; align-items: center; gap: 10px; }
+        .card-header .header-actions a, .card-header .header-actions button { color: white; text-decoration: none; font-size: 14px; opacity: 0.85; background: none; border: none; cursor: pointer; padding: 0; font-family: Arial, sans-serif; }
+        .card-header .header-actions a:hover, .card-header .header-actions button:hover { opacity: 1; }
+        .card-header .header-actions .separator { opacity: 0.3; }
+        .address-form { padding: 20px 30px; background: #fafafa; border-bottom: 1px solid #eee; }
+        .address-form .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+        .address-form .field { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px; position: relative; }
+        .address-form .field label { font-size: 13px; font-weight: 600; color: #555; display: flex; align-items: center; gap: 6px; }
+        .address-form .field input { padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.3s; }
+        .address-form .field input:focus { border-color: #667eea; }
+        .address-form .field input.valid { border-color: #27ae60; }
+        .address-form .field .addr-display { font-size: 11px; color: #888; min-height: 16px; padding: 2px 0 0 2px; word-break: break-word; }
+        .address-form button { padding: 10px 28px; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; height: 42px; }
+        .address-form button:hover { background: #5a6fd6; }
+        .address-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .map-container { width: 100%; height: 450px; }
+        #map { width: 100%; height: 100%; }
+        .info-bar { padding: 20px 30px; background: #fafafa; border-top: 1px solid #eee; display: flex; align-items: center; flex-wrap: wrap; gap: 16px; color: #555; font-size: 14px; }
+        .info-bar .status-dot { width: 10px; height: 10px; background: #27ae60; border-radius: 50%; display: inline-block; animation: pulse 2s infinite; }
+        .info-bar .stat { display: flex; align-items: center; gap: 6px; }
+        .info-bar .stat .label { font-weight: 600; color: #333; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .error-msg { padding: 10px 30px; background: #ffeaea; color: #e74c3c; font-size: 13px; display: none; }
+        .examples-hint { font-size: 12px; color: #999; padding: 4px 0 0 2px; }
+        .save-indicator { font-size: 11px; color: #27ae60; padding: 4px 0 0 2px; display: none; }
+        @media (max-width:600px) { .card-header{flex-direction:column;align-items:flex-start} .map-container{height:300px} .address-form .field{min-width:100%} }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="card-header">
+            <h1>📍 Rota do Pedido</h1>
+            <span class="order-id" id="orderDisplay">ID: --</span>
+            <div class="header-actions">
+                <button onclick="window.location.href='index.html'">← Voltar</button>
+                <span class="separator">|</span>
+                <a href="index.html">📋 Novo rastreamento</a>
+            </div>
+        </div>
+        <div class="address-form">
+            <div class="row">
+                <div class="field">
+                    <label>📍 CEP de Origem</label>
+                    <input type="text" id="origin" placeholder="Ex: 38408326" maxlength="9" autocomplete="off" />
+                    <div class="addr-display" id="originAddr"></div>
+                    <div class="examples-hint">Digite apenas números (ex: 38408326)</div>
+                </div>
+                <div class="field">
+                    <label>🏁 CEP de Destino</label>
+                    <input type="text" id="destination" placeholder="Ex: 38400100" maxlength="9" autocomplete="off" />
+                    <div class="addr-display" id="destAddr"></div>
+                    <div class="examples-hint">Digite apenas números (ex: 38400100)</div>
+                </div>
+                <button id="routeBtn" onclick="calcRoute()">Traçar Rota</button>
+            </div>
+            <div class="save-indicator" id="saveIndicator">✓ Dados salvos no histórico</div>
+        </div>
+        <div class="error-msg" id="errorMsg"></div>
+        <div class="map-container"><div id="map"></div></div>
+        <div class="info-bar">
+            <span class="status-dot"></span>
+            <span>Pedido em trânsito</span>
+            <span class="stat" id="distStat"><span class="label">Distância:</span> --</span>
+            <span class="stat" id="timeStat"><span class="label">Tempo estimado:</span> --</span>
+        </div>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('id') || 'sem-id';
+        document.getElementById('orderDisplay').textContent = 'ID: ' + orderId;
+
+        const map = L.map('map').setView([-18.5, -44.5], 5);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap', maxZoom: 19
+        }).addTo(map);
+
+        let currentRoute = null, currentMarkers = [];
+        let lastSavedData = {};
+
+        function clearRoute() {
+            if (currentRoute) { map.removeLayer(currentRoute); currentRoute = null; }
+            currentMarkers.forEach(m => map.removeLayer(m));
+            currentMarkers = [];
+            ['origin','destination'].forEach(id => {
+                const el = document.getElementById(id);
+                el.dataset.lat = ''; el.dataset.lon = ''; el.classList.remove('valid');
+            });
+            document.getElementById('distStat').innerHTML = '<span class="label">Distância:</span> --';
+            document.getElementById('timeStat').innerHTML = '<span class="label">Tempo estimado:</span> --';
+        }
+
+        function formatCEP(value) {
+            const d = value.replace(/\D/g, '');
+            return d.length <= 5 ? d : d.substring(0,5) + '-' + d.substring(5,8);
+        }
+
+        // Haversine distance between two lat/lng points
+        function haversineKm(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function saveToDB(distancia, tempo, origemCEP, destinoCEP, origemAddr, destAddr) {
+            if (!orderId || orderId === 'sem-id') return;
+
+            const data = {
+                distancia: distancia || '--',
+                tempo: tempo || '--',
+                origemCEP: origemCEP || '--',
+                destinoCEP: destinoCEP || '--',
+                origemEndereco: origemAddr || '--',
+                destinoEndereco: destAddr || '--'
+            };
+
+            DB.save(orderId, data);
+            lastSavedData = data;
+
+            const indicator = document.getElementById('saveIndicator');
+            indicator.style.display = 'block';
+            setTimeout(() => { indicator.style.display = 'none'; }, 3000);
+        }
+
+        async function getAddressFromCEP(cep) {
+            const digits = cep.replace(/\D/g, '');
+            if (digits.length !== 8) return null;
+            const resp = await fetch('https://brasilapi.com.br/api/cep/v1/' + digits);
+            if (!resp.ok) return null;
+            return await resp.json();
+        }
+
+        async function geocodeAddress(address) {
+            const url = 'https://nominatim.openstreetmap.org/search?format=json&q=' +
+                        encodeURIComponent(address) + '&limit=1&countrycodes=br';
+            const resp = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+            const data = await resp.json();
+            if (data && data.length > 0) {
+                return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+            }
+            return null;
+        }
+
+        async function lookupCEP(cep, inputId, displayId) {
+            const display = document.getElementById(displayId);
+            const input = document.getElementById(inputId);
+            const digits = cep.replace(/\D/g, '');
+
+            if (digits.length !== 8) {
+                display.textContent = ''; display.style.color = '#888';
+                input.dataset.lat = ''; input.dataset.lon = ''; input.classList.remove('valid');
+                return;
+            }
+
+            input.dataset.lat = ''; input.dataset.lon = ''; input.classList.remove('valid');
+            display.textContent = 'Consultando CEP...'; display.style.color = '#888';
+
+            try {
+                const data = await getAddressFromCEP(cep);
+                if (!data) {
+                    display.textContent = 'CEP inválido ou não encontrado.'; display.style.color = '#e74c3c';
+                    return;
+                }
+
+                const endereco = (data.street || '') + ', ' + (data.neighborhood || '') + ' - ' + data.city + '/' + data.state;
+                display.textContent = endereco + ' (obtendo coordenadas...)'; display.style.color = '#888';
+                input.classList.add('valid');
+
+                const query = data.street
+                    ? data.street + ', ' + data.neighborhood + ', ' + data.city + ', ' + data.state + ', Brasil'
+                    : data.neighborhood + ', ' + data.city + ', ' + data.state + ', Brasil';
+                let coord = await geocodeAddress(query);
+
+                if (!coord) {
+                    coord = await geocodeAddress(data.city + ', ' + data.state + ', Brasil');
+                    if (coord) {
+                        display.textContent = endereco + ' (coordenadas aproximadas)';
+                    }
+                }
+
+                if (coord && !isNaN(coord.lat) && !isNaN(coord.lng)) {
+                    input.dataset.lat = coord.lat;
+                    input.dataset.lon = coord.lng;
+                    display.style.color = '#27ae60';
+                    if (!display.textContent.includes('aproximadas')) display.textContent = endereco;
+                    input.classList.add('valid');
+                    checkAutoCalc();
+                } else {
+                    display.textContent = endereco + ' (sem coordenadas)';
+                    display.style.color = '#e67e22';
+                }
+            } catch (err) {
+                display.textContent = 'Erro ao consultar CEP.'; display.style.color = '#e74c3c';
+            }
+        }
+
+        function setupCEPInput(inputId, displayId) {
+            const input = document.getElementById(inputId);
+            let timer = null;
+            input.addEventListener('input', () => {
+                const pos = input.selectionStart;
+                const before = input.value;
+                input.value = formatCEP(input.value);
+                const diff = input.value.length - before.length;
+                try { input.setSelectionRange(pos + diff, pos + diff); } catch {}
+                input.dataset.lat = ''; input.dataset.lon = ''; input.classList.remove('valid');
+                document.getElementById(displayId).textContent = ''; document.getElementById(displayId).style.color = '#888';
+                const digits = input.value.replace(/\D/g, '');
+                if (digits.length === 8) {
+                    if (timer) clearTimeout(timer);
+                    timer = setTimeout(() => lookupCEP(input.value, inputId, displayId), 500);
+                }
+            });
+        }
+
+        function checkAutoCalc() {
+            const o = document.getElementById('origin');
+            const d = document.getElementById('destination');
+            if (o.dataset.lat && o.dataset.lon && d.dataset.lat && d.dataset.lon) {
+                drawStraightLine(
+                    parseFloat(o.dataset.lat), parseFloat(o.dataset.lon),
+                    parseFloat(d.dataset.lat), parseFloat(d.dataset.lon),
+                    document.getElementById('originAddr').textContent,
+                    document.getElementById('destAddr').textContent
+                );
+                tryCalcOSRM(
+                    parseFloat(o.dataset.lat), parseFloat(o.dataset.lon),
+                    parseFloat(d.dataset.lat), parseFloat(d.dataset.lon),
+                    document.getElementById('originAddr').textContent,
+                    document.getElementById('destAddr').textContent
+                );
+            }
+        }
+
+        // Draw straight line immediately (always works)
+        function drawStraightLine(olat, olng, dlat, dlng, originName, destName) {
+            clearRoute();
+            const straightCoords = [[olat, olng], [dlat, dlng]];
+            currentRoute = L.polyline(straightCoords, { color: '#3498db', weight: 4, opacity: 0.8, dashArray: '10 8' }).addTo(map);
+
+            const addMarker = (lat, lng, emoji, bg, name) => {
+                const m = L.marker([lat, lng], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<div style="background:${bg};color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${emoji}</div>`,
+                        iconSize: [30,30], iconAnchor: [15,15]
+                    })
+                }).addTo(map);
+                m.bindPopup(`<b>${emoji === '📍' ? 'Origem' : 'Destino'}</b><br>${name}`);
+                currentMarkers.push(m);
+            };
+
+            addMarker(olat, olng, '📍', '#667eea', originName);
+            addMarker(dlat, dlng, '🏁', '#e74c3c', destName);
+
+            map.fitBounds(currentRoute.getBounds(), { padding: [50,50] });
+
+            const dist = haversineKm(olat, olng, dlat, dlng);
+            const distText = dist.toFixed(1) + ' km';
+            document.getElementById('distStat').innerHTML = '<span class="label">Distância (linha reta):</span> ' + distText;
+            document.getElementById('timeStat').innerHTML = '<span class="label">Tempo estimado:</span> calculando...';
+            document.getElementById('errorMsg').style.display = 'none';
+
+            // Save straight line data to DB
+            const originCEP = document.getElementById('origin').value.trim();
+            const destCEP = document.getElementById('destination').value.trim();
+            saveToDB(distText, 'calculando...', originCEP, destCEP, originName, destName);
+        }
+
+        // Try OSRM in background, updates map if successful
+        async function tryCalcOSRM(olat, olng, dlat, dlng, originName, destName) {
+            try {
+                const url = 'https://router.project-osrm.org/route/v1/driving/' +
+                    olng + ',' + olat + ';' + dlng + ',' + dlat +
+                    '?overview=full&geometries=geojson&language=pt-BR';
+                const resp = await fetch(url);
+                const data = await resp.json();
+
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+                    clearRoute();
+                    currentRoute = L.polyline(coords, { color: '#e74c3c', weight: 5, opacity: 0.9 }).addTo(map);
+
+                    const addMarker = (lat, lng, emoji, bg, name) => {
+                        const m = L.marker([lat, lng], {
+                            icon: L.divIcon({
+                                className: '',
+                                html: `<div style="background:${bg};color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:14px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${emoji}</div>`,
+                                iconSize: [30,30], iconAnchor: [15,15]
+                            })
+                        }).addTo(map);
+                        m.bindPopup(`<b>${emoji === '📍' ? 'Origem' : 'Destino'}</b><br>${name}`);
+                        currentMarkers.push(m);
+                    };
+
+                    addMarker(olat, olng, '📍', '#667eea', originName);
+                    addMarker(dlat, dlng, '🏁', '#e74c3c', destName);
+
+                    map.fitBounds(currentRoute.getBounds(), { padding: [50,50] });
+
+                    const distKm = (route.distance / 1000).toFixed(1);
+                    const timeMin = Math.round(route.duration / 60);
+                    const timeText = timeMin >= 60 ? Math.floor(timeMin/60) + 'h ' + (timeMin%60) + 'min' : timeMin + ' min';
+                    const distText = distKm + ' km';
+
+                    document.getElementById('distStat').innerHTML = '<span class="label">Distância (rota):</span> ' + distText;
+                    document.getElementById('timeStat').innerHTML = '<span class="label">Tempo estimado:</span> ' + timeText;
+
+                    // Update DB with route data
+                    const originCEP = document.getElementById('origin').value.trim();
+                    const destCEP = document.getElementById('destination').value.trim();
+                    saveToDB(distText, timeText, originCEP, destCEP, originName, destName);
+                }
+            } catch (e) {
+                console.log('OSRM unavailable, keeping straight line');
+            }
+        }
+
+        async function calcRoute() {
+            const originInput = document.getElementById('origin');
+            const destInput = document.getElementById('destination');
+            const errorEl = document.getElementById('errorMsg');
+            const origin = originInput.value.trim(), destination = destInput.value.trim();
+
+            errorEl.style.display = 'none';
+
+            if (!origin || !destination) {
+                errorEl.textContent = 'Preencha os dois CEPs.'; errorEl.style.display = 'block'; return;
+            }
+
+            const oD = origin.replace(/\D/g,''), dD = destination.replace(/\D/g,'');
+            if (oD.length !== 8) { errorEl.textContent = 'CEP de origem inválido.'; errorEl.style.display = 'block'; return; }
+            if (dD.length !== 8) { errorEl.textContent = 'CEP de destino inválido.'; errorEl.style.display = 'block'; return; }
+
+            if (originInput.dataset.lat && originInput.dataset.lon && destInput.dataset.lat && destInput.dataset.lon) {
+                drawStraightLine(
+                    parseFloat(originInput.dataset.lat), parseFloat(originInput.dataset.lon),
+                    parseFloat(destInput.dataset.lat), parseFloat(destInput.dataset.lon),
+                    document.getElementById('originAddr').textContent,
+                    document.getElementById('destAddr').textContent
+                );
+                tryCalcOSRM(
+                    parseFloat(originInput.dataset.lat), parseFloat(originInput.dataset.lon),
+                    parseFloat(destInput.dataset.lat), parseFloat(destInput.dataset.lon),
+                    document.getElementById('originAddr').textContent,
+                    document.getElementById('destAddr').textContent
+                );
+                return;
+            }
+
+            const btn = document.getElementById('routeBtn');
+            btn.disabled = true; btn.textContent = 'Consultando CEPs...';
+
+            await lookupCEP(origin, 'origin', 'originAddr');
+            await lookupCEP(destination, 'destination', 'destAddr');
+
+            if (!originInput.dataset.lat || !originInput.dataset.lon) {
+                errorEl.textContent = 'Não foi possível obter a localização do CEP de origem.';
+                errorEl.style.display = 'block';
+            } else if (!destInput.dataset.lat || !destInput.dataset.lon) {
+                errorEl.textContent = 'Não foi possível obter a localização do CEP de destino.';
+                errorEl.style.display = 'block';
+            } else {
+                drawStraightLine(
+                    parseFloat(originInput.dataset.lat), parseFloat(originInput.dataset.lon),
+                    parseFloat(destInput.dataset.lat), parseFloat(destInput.dataset.lon),
+                    document.getElementById('originAddr').textContent,
+                    document.getElementById('destAddr').textContent
+                );
+                tryCalcOSRM(
+                    parseFloat(originInput.dataset.lat), parseFloat(originInput.dataset.lon),
+                    parseFloat(destInput.dataset.lat), parseFloat(destInput.dataset.lon),
+                    document.getElementById('originAddr').textContent,
+                    document.getElementById('destAddr').textContent
+                );
+            }
+
+            btn.disabled = false; btn.textContent = 'Traçar Rota';
+        }
+
+        document.getElementById('destination').addEventListener('keydown', e => { if (e.key === 'Enter') calcRoute(); });
+        document.getElementById('origin').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('destination').focus(); });
+    </script>
+</body>
+</html>

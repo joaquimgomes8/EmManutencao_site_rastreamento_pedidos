@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreamento de Pedidos</title>
+    <script src="database.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 36px;
+            color: white;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        input {
+            padding: 14px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        button:hover {
+            background: #5a6fd6;
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .error {
+            color: #e74c3c;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .history-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: left;
+        }
+
+        .history-section h3 {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .history-list {
+            max-height: 200px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: #f9f9ff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border: 1px solid #eee;
+        }
+
+        .history-item:hover {
+            background: #eeeef8;
+        }
+
+        .history-item .hi-id {
+            font-weight: 600;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .history-item .hi-date {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .history-item .hi-info {
+            font-size: 11px;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        .no-history {
+            text-align: center;
+            color: #bbb;
+            font-size: 13px;
+            padding: 10px;
+        }
+
+        .clear-btn {
+            background: none;
+            color: #e74c3c;
+            font-size: 12px;
+            padding: 4px 10px;
+            border: 1px solid #e74c3c;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .clear-btn:hover {
+            background: #ffeaea;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📦</div>
+        <h1>Rastrear Pedido</h1>
+        <p>Insira o ID do seu pedido para acompanhar a localização</p>
+        <div class="input-group">
+            <input type="text" id="orderId" placeholder="Ex: BR123456789" />
+            <button onclick="trackOrder()">Rastrear</button>
+        </div>
+        <div class="error" id="errorMsg">Por favor, insira um ID de pedido.</div>
+
+        <div class="history-section">
+            <h3>📋 Histórico de Rastreamentos</h3>
+            <div class="history-list" id="historyList">
+                <div class="no-history">Nenhum rastreamento realizado ainda.</div>
+            </div>
+            <div style="text-align: center; margin-top: 10px;">
+                <button class="clear-btn" onclick="clearHistory()" id="clearBtn" style="display:none;">
+                    🗑️ Limpar histórico
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function trackOrder() {
+            const input = document.getElementById('orderId');
+            const error = document.getElementById('errorMsg');
+            const id = input.value.trim();
+
+            if (!id) {
+                error.style.display = 'block';
+                return;
+            }
+
+            error.style.display = 'none';
+            window.location.href = 'rastreamento.html?id=' + encodeURIComponent(id);
+        }
+
+        document.getElementById('orderId').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                trackOrder();
+            }
+        });
+
+        function loadHistory() {
+            const list = document.getElementById('historyList');
+            const clearBtn = document.getElementById('clearBtn');
+            const records = DB.list();
+
+            if (records.length === 0) {
+                list.innerHTML = '<div class="no-history">Nenhum rastreamento realizado ainda.</div>';
+                clearBtn.style.display = 'none';
+                return;
+            }
+
+            clearBtn.style.display = 'inline-block';
+            list.innerHTML = records.reverse().map(r => {
+                const date = new Date(r.lastUpdated);
+                const dateStr = date.toLocaleString('pt-BR');
+                const dist = r.distancia || '--';
+                const time = r.tempo || '--';
+                const origin = r.origemCEP || '--';
+                const dest = r.destinoCEP || '--';
+                return `
+                    <div class="history-item" onclick="window.location.href='rastreamento.html?id=${encodeURIComponent(r.id)}'">
+                        <div>
+                            <div class="hi-id">${r.id}</div>
+                            <div class="hi-info">📍${origin} → 🏁${dest}</div>
+                            <div class="hi-info">📏 ${dist} | ⏱ ${time}</div>
+                        </div>
+                        <div class="hi-date">${dateStr}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function clearHistory() {
+            if (confirm('Tem certeza que deseja limpar todo o histórico de rastreamentos?')) {
+                // Clear all records from localStorage
+                localStorage.removeItem('rastreamentos');
+                loadHistory();
+            }
+        }
+
+        // Load history on page load
+        window.addEventListener('load', loadHistory);
+    </script>
+</body>
+</html>
